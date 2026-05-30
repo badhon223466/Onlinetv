@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus TV - Premium IPTV Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scroll-bar-width: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #14b8a6; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #030712; }
+        .plyr--video { border-radius: 12px; overflow: hidden; --plyr-color-main: #14b8a6; }
+        @media (max-width: 768px) { .plyr--video { border-radius: 0px; } }
+        
+        /* Custom Next Button for Plyr */
+        .plyr__controls { gap: 4px; }
+        .plyr-next-btn {
+            background: transparent;
+            border: 0;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            padding: 7px;
+            transition: background .3s ease,color .3s ease,opacity .3s ease;
+        }
+        .plyr-next-btn:hover { background: #14b8a6; color: #030712; }
+
+        /* CRITICAL FIX FOR FULLSCREEN ADS */
+        .plyr--fullscreen-enabled #videoOverlayAd,
+        .plyr--fullscreen-enabled #fullscreenAd {
+            z-index: 2147483647 !important;
+        }
+
+        /* BANNER HEIGHT HARD-FIX */
+        #videoOverlayAd {
+            max-height: 95px !important;
+        }
+        .ad-iframe-container {
+            height: 60px !important;
+            min-height: 60px !important;
+            max-height: 60px !important;
+        }
+        .ad-iframe-container iframe {
+            height: 60px !important;
+            max-height: 60px !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-white font-sans antialiased h-screen overflow-hidden">
+
+    <div class="flex flex-col md:flex-row h-screen w-full bg-gray-950">
+        
+        <div class="flex flex-col w-full md:w-[60%] lg:w-[65%] shrink-0 bg-gray-900/40 md:border-r border-gray-800/60">
+            
+            <header class="px-4 py-2 bg-gradient-to-b from-gray-950 to-gray-900/40 border-b border-gray-800/60 shadow-lg flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="bg-gradient-to-tr from-teal-500 to-emerald-400 p-1.5 rounded-lg shadow-md">
+                            <svg class="w-4 h-4 text-gray-950 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 4v16M17 4v16M3 8h18M3 16h18" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-base font-black tracking-wide bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
+                                NEXUS <span class="text-white font-normal text-xs">TV</span>
+                            </h1>
+                        </div>
+                    </div>
+                    <span class="text-[10px] text-teal-400 font-bold bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded-md">Live Hub</span>
+                </div>
+                
+                <div class="relative group">
+                    <input type="text" id="searchBar" placeholder="Search channels..." 
+                        class="w-full bg-gray-950 border border-gray-800 text-xs rounded-lg pl-8 pr-4 py-1.5 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors text-gray-200 placeholder-gray-500 shadow-inner">
+                    <div class="absolute left-2.5 top-2.5 text-gray-500 group-focus-within:text-teal-400 transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                </div>
+            </header>
+
+            <section class="w-full bg-black aspect-video md:p-4 flex items-center justify-center relative group flex-1 md:flex-initial">
+                <div id="plyrWrapper" class="w-full h-full relative">
+                    <video id="player" playsinline controls class="w-full h-full"></video>
+                    
+                    <div id="playerLoader" class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3 transition-opacity duration-300 opacity-0 pointer-events-none z-10">
+                        <div class="w-10 h-10 border-4 border-teal-500/30 border-t-teal-400 rounded-full animate-spin"></div>
+                        <p class="text-xs text-teal-400 font-medium tracking-wide bg-gray-950/80 px-3 py-1 rounded-full border border-gray-800">Buffering...</p>
+                    </div>
+
+                    <div id="videoOverlayAd" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 z-20 bg-gray-950/95 p-1 rounded-xl border border-gray-800 shadow-2xl hidden w-full max-w-[480px]">
+                        <div class="flex justify-between items-center px-1 pb-0.5">
+                            <span class="text-[9px] bg-amber-500 text-gray-950 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">Sponsored Ad</span>
+                            <button onclick="closeOverlayAd()" class="text-gray-400 hover:text-white text-[10px] font-bold px-1.5 py-0.5 bg-gray-800 rounded-md transition-colors">✕ Close</button>
+                        </div>
+                        <div class="ad-iframe-container w-full flex items-center justify-center bg-gray-900 overflow-hidden rounded-lg">
+                            <script type="text/javascript">
+                                atOptions = {
+                                    'key' : 'e9ea26c4dbf4100e57d7df821e66c8bf',
+                                    'format' : 'iframe',
+                                    'height' : 60,
+                                    'width' : 468,
+                                    'params' : {}
+                                };
+                            </script>
+                            <script type="text/javascript" src="https://www.highperformanceformat.com/e9ea26c4dbf4100e57d7df821e66c8bf/invoke.js"></script>
+                        </div>
+                    </div>
+
+                    <div id="fullscreenAd" class="absolute inset-0 z-30 bg-gray-950 flex flex-col items-center justify-center p-4 transition-opacity duration-300 hidden">
+                        <div class="absolute top-4 left-4 right-4 flex justify-between items-center z-40">
+                            <span class="text-[10px] bg-amber-500 text-gray-950 px-2 py-1 rounded font-black uppercase tracking-wider">Advertisement</span>
+                            <div id="adTimerBtn" class="bg-gray-900/90 border border-gray-800 text-xs font-semibold px-3 py-1.5 rounded-xl text-gray-300 backdrop-blur-sm">
+                                Video will resume in <span id="adCountdown" class="text-teal-400 font-bold">10</span>s
+                            </div>
+                        </div>
+                        
+                        <div class="w-full h-full max-w-xl flex flex-col items-center justify-center gap-4">
+                            <a id="fsAdLink" href="https://www.effectivecpmnetwork.com/ii5ky5ws2g?key=ba0cf3df3e6f24838d598d918ef6713d" target="_blank" class="w-full bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-800/80 rounded-2xl p-6 text-center shadow-2xl relative overflow-hidden group flex flex-col items-center justify-center gap-4 cursor-pointer min-h-[220px]">
+                                <div class="absolute -inset-x-20 top-0 h-20 bg-teal-500/10 blur-3xl rounded-full transition-opacity group-hover:opacity-100"></div>
+                                <div class="w-16 h-16 bg-gradient-to-tr from-teal-500/20 to-emerald-500/10 text-teal-400 rounded-2xl flex items-center justify-center shadow-xl border border-teal-500/30 group-hover:scale-110 group-hover:border-teal-400 transition-all duration-300 animate-pulse">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400">⚡ HIGH SPEED STREAM SPONSOR</h3>
+                                    <p class="text-xs text-gray-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                                        Our sponsor allows this stream to remain free. Click here to check out their offer and skip waiting.
+                                    </p>
+                                </div>
+                                <div class="px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-gray-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-teal-500/20 group-hover:from-teal-400 group-hover:to-emerald-400 transition-all">
+                                    Visit Sponsor & Skip Waiting ❯
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </div>
+
+        <div class="flex flex-col flex-1 h-full overflow-hidden bg-gray-950">
+            <div class="p-2.5 bg-gray-900/20 border-b border-gray-800/40 shrink-0">
+                <div id="tabsContainer" class="flex gap-2 overflow-x-auto no-scrollbar py-1 hidden"></div>
+            </div>
+
+            <main class="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col justify-between">
+                <div>
+                    <div id="loading" class="flex flex-col items-center justify-center py-20 gap-4">
+                        <div class="relative w-12 h-12 flex items-center justify-center">
+                            <div class="absolute inset-0 border-4 border-teal-500/20 rounded-full"></div>
+                            <div class="absolute inset-0 border-4 border-t-teal-400 rounded-full animate-spin"></div>
+                        </div>
+                        <p class="text-xs font-bold text-gray-400 tracking-wide animate-pulse">Syncing Streams...</p>
+                    </div>
+                    
+                    <div id="channelContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 hidden mb-4"></div>
+                </div>
+
+                <div class="w-full flex flex-col items-center justify-center border border-gray-800/60 p-2 rounded-2xl bg-gray-900/20 mt-auto shrink-0">
+                    <p class="text-[9px] text-gray-600 mb-1 tracking-widest uppercase">Advertisement</p>
+                    <div id="adsterraBottomBanner" class="w-full max-w-full overflow-hidden flex justify-center min-h-[90px]">
+                        <script type="text/javascript">
+                            atOptions = {
+                                'key' : 'c4e3e5a2dbe394e11f2ac8c44c299741',
+                                'format' : 'iframe',
+                                'height' : 90,
+                                'width' : 728,
+                                'params' : {}
+                            };
+                        </script>
+                        <script type="text/javascript" src="https://www.highperformanceformat.com/c4e3e5a2dbe394e11f2ac8c44c299741/invoke.js"></script>
+                    </div>
+                </div>
+            </main>
+        </div>
+        
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
+
+    <script>
+        const AD_CONFIG = {
+            fullscreenAdInterval: 90000 // প্রতি ১.৫ মিনিট পর পর ফুলস্ক্রিন অ্যাড
+        };
+
+        const M3U_URLS = [
+            "https://raw.githubusercontent.com/srhady/Hady/refs/heads/main/akash_live.m3u",
+            "https://raw.githubusercontent.com/PolyKum/Sports-IPTV/main/sports.m3u"
+        ];
+
+        let allChannels = [];
+        let filteredChannels = [];
+        let currentChannelIndex = 0;
+        let categories = ["All"];
+        let currentCategory = "All";
+        let activeHls = null;
+        let adCountdownInterval = null;
+        let adAutoCloseTimeout = null;
+        let isFirstLoad = true;
+
+        const video = document.getElementById('player');
+        const channelContainer = document.getElementById('channelContainer');
+        const tabsContainer = document.getElementById('tabsContainer');
+        const loadingDiv = document.getElementById('loading');
+        const searchBar = document.getElementById('searchBar');
+        const playerLoader = document.getElementById('playerLoader');
+        
+        const overlayAd = document.getElementById('videoOverlayAd');
+        const fullscreenAd = document.getElementById('fullscreenAd');
+        const adCountdown = document.getElementById('adCountdown');
+        const adTimerBtn = document.getElementById('adTimerBtn');
+
+        const player = new Plyr(video, {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
+            ratio: '16:9',
+            autoplay: false 
+        });
+
+        player.on('ready', () => {
+            const plyrContainer = document.querySelector('.plyr');
+            if (plyrContainer) {
+                plyrContainer.appendChild(overlayAd);
+                plyrContainer.appendChild(fullscreenAd);
+                plyrContainer.appendChild(playerLoader);
+            }
+
+            const plyrControls = document.querySelector('.plyr__controls');
+            if (plyrControls && !document.querySelector('.plyr-next-btn')) {
+                const playBtn = plyrControls.querySelector('[data-plyr="play"]');
+                if (playBtn) {
+                    const nextBtn = document.createElement('button');
+                    nextBtn.type = 'button';
+                    nextBtn.className = 'plyr-next-btn';
+                    nextBtn.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                        </svg>`;
+                    nextBtn.addEventListener('click', () => playNextChannel());
+                    playBtn.parentNode.insertBefore(nextBtn, playBtn.nextSibling);
+                }
+            }
+        });
+
+        video.addEventListener('waiting', () => playerLoader.classList.remove('opacity-0', 'pointer-events-none'));
+        video.addEventListener('playing', () => playerLoader.classList.add('opacity-0', 'pointer-events-none'));
+
+        function triggerVideoOverlayAd() {
+            overlayAd.classList.remove('hidden');
+            setTimeout(() => { closeOverlayAd(); }, 6000); 
+        }
+        function closeOverlayAd() { overlayAd.classList.add('hidden'); }
+
+        function triggerFullscreenAd() {
+            if (fullscreenAd.classList.contains('hidden')) {
+                player.pause();
+                fullscreenAd.classList.remove('hidden');
+                
+                let timeLeft = 10; 
+                adCountdown.innerText = timeLeft;
+                adTimerBtn.innerHTML = `Video will resume in <span class="text-teal-400 font-bold">${timeLeft}</span>s`;
+
+                adCountdownInterval = setInterval(() => {
+                    timeLeft--;
+                    if (timeLeft > 0) {
+                        adCountdown.innerText = timeLeft;
+                        adTimerBtn.innerHTML = `Video will resume in <span class="text-teal-400 font-bold">${timeLeft}</span>s`;
+                    } else {
+                        clearInterval(adCountdownInterval);
+                    }
+                }, 1000);
+
+                adAutoCloseTimeout = setTimeout(() => {
+                    closeFullscreenAd();
+                }, 10000);
+            }
+        }
+
+        function closeFullscreenAd() {
+            clearInterval(adCountdownInterval);
+            clearTimeout(adAutoCloseTimeout);
+            fullscreenAd.classList.add('hidden');
+            player.play();
+        }
+
+        setInterval(() => { triggerFullscreenAd(); }, AD_CONFIG.fullscreenAdInterval);
+
+        function parseM3U(data) {
+            const lines = data.split('\n');
+            const channels = [];
+            let currentChannel = null;
+            const categorySet = new Set();
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (line.startsWith('#EXTINF:')) {
+                    currentChannel = {};
+                    const nameMatch = line.match(/,(.+)$/);
+                    currentChannel.name = nameMatch ? nameMatch[1].trim() : "Unknown Channel";
+                    const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+                    currentChannel.logo = logoMatch ? logoMatch[1] : null;
+                    const groupMatch = line.match(/group-title="([^"]+)"/);
+                    let groupName = groupMatch ? groupMatch[1].trim() : "Others";
+                    currentChannel.category = groupName;
+                    categorySet.add(groupName);
+                    currentChannel.status = "checking";
+                } else if (line.startsWith('http') && currentChannel) {
+                    currentChannel.url = line;
+                    channels.push(currentChannel);
+                    currentChannel = null;
+                }
+            }
+            return { channels, categories: Array.from(categorySet) };
+        }
+
+        async function checkChannelStatus(channel, cardElement) {
+            const indicator = cardElement.querySelector('.status-indicator');
+            try {
+                await fetch(channel.url, { method: 'HEAD', mode: 'no-cors' });
+                channel.status = "online";
+                indicator.className = "status-indicator absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full border border-gray-950";
+            } catch (error) {
+                channel.status = "offline";
+                indicator.className = "status-indicator absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full border border-gray-950";
+            }
+        }
+
+        function playStream(url) {
+            playerLoader.classList.remove('opacity-0', 'pointer-events-none');
+            if (activeHls) activeHls.destroy();
+
+            video.muted = false;
+            player.muted = false;
+
+            const handlePlayAttempt = () => {
+                if (isFirstLoad) {
+                    isFirstLoad = false; 
+                    playerLoader.classList.add('opacity-0', 'pointer-events-none');
+                    triggerVideoOverlayAd();
+                    return; 
+                }
+
+                video.play()
+                    .then(() => {
+                        triggerVideoOverlayAd();
+                    })
+                    .catch(e => {
+                        console.log("Play blocked by browser, waiting for user click.");
+                    });
+            };
+
+            if (Hls.isSupported()) {
+                activeHls = new Hls();
+                activeHls.loadSource(url);
+                activeHls.attachMedia(video);
+                activeHls.on(Hls.Events.MANIFEST_PARSED, handlePlayAttempt);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', handlePlayAttempt);
+            }
+        }
+
+        function playNextChannel() {
+            if (filteredChannels.length > 0) {
+                currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
+                isFirstLoad = false; 
+                playStream(filteredChannels[currentChannelIndex].url);
+            }
+        }
+
+        // রেন্ডার ফাংশনসমূহ
+        function renderTabs() {
+            tabsContainer.innerHTML = '';
+            categories.forEach(category => {
+                const tab = document.createElement('button');
+                if (category === currentCategory) {
+                    tab.className = "shrink-0 px-3 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-gray-950 shadow-md cursor-pointer";
+                } else {
+                    tab.className = "shrink-0 px-3 py-1 rounded-lg text-[11px] font-medium bg-gray-950/60 hover:bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-800/80 cursor-pointer";
+                }
+                tab.innerText = category;
+                tab.addEventListener('click', () => {
+                    currentCategory = category;
+                    searchBar.value = ""; 
+                    renderTabs();
+                    filterAndRenderChannels();
+                });
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        function filterAndRenderChannels(searchTerm = "") {
+            filteredChannels = allChannels;
+            if (currentCategory !== "All") {
+                filteredChannels = filteredChannels.filter(channel => channel.category === currentCategory);
+            }
+            if (searchTerm) {
+                filteredChannels = filteredChannels.filter(channel => channel.name.toLowerCase().includes(searchTerm));
+            }
+
+            channelContainer.innerHTML = '';
+            if(filteredChannels.length === 0) {
+                channelContainer.innerHTML = `<p class="col-span-full text-center text-gray-500 py-10 text-sm">No channels found</p>`;
+                return;
+            }
+
+            filteredChannels.forEach((channel, index) => {
+                const card = document.createElement('button');
+                card.className = "w-full flex flex-col items-center justify-center bg-gray-900/50 hover:bg-gray-800/80 border border-gray-800/60 hover:border-teal-500/40 p-2.5 rounded-xl text-center cursor-pointer active:scale-[0.95] gap-2 shadow-sm backdrop-blur-sm";
+                const logoSrc = channel.logo ? channel.logo : `https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=100&auto=format&fit=crop`;
+                
+                let indicatorClass = "bg-amber-500 animate-pulse"; 
+                if(channel.status === "online") indicatorClass = "bg-emerald-500";
+                if(channel.status === "offline") indicatorClass = "bg-rose-500";
+
+                card.innerHTML = `
+                    <div class="relative w-10 h-10 bg-gray-950 rounded-xl border border-gray-800/60 p-1 flex items-center justify-center shadow-inner">
+                        <img src="${logoSrc}" class="w-full h-full object-contain" alt="" onerror="this.src='https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=100&auto=format&fit=crop'">
+                        <span class="status-indicator absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full border border-gray-950 ${indicatorClass}"></span>
+                    </div>
+                    <div class="w-full">
+                        <p class="text-[10px] font-semibold text-gray-300 truncate tracking-wide px-0.5">${channel.name}</p>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    currentChannelIndex = index;
+                    isFirstLoad = false; 
+                    playStream(channel.url);
+                    if(window.innerWidth < 768) window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+
+                channelContainer.appendChild(card);
+                if(channel.status === "checking") checkChannelStatus(channel, card);
+            });
+        }
+
+        async function loadAllIPTV() {
+            loadingDiv.classList.remove('hidden');
+            tabsContainer.classList.add('hidden');
+            channelContainer.classList.add('hidden');
+            
+            allChannels = [];
+            const categorySet = new Set();
+
+            for(const url of M3U_URLS) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) continue;
+                    const m3uText = await response.text();
+                    const parsed = parseM3U(m3uText);
+                    
+                    allChannels = [...allChannels, ...parsed.channels];
+                    parsed.categories.forEach(cat => categorySet.add(cat));
+                } catch (e) {
+                    console.error("Error loading: " + url, e);
+                }
+            }
+
+            categories = ["All", ...Array.from(categorySet)];
+            filteredChannels = allChannels;
+
+            loadingDiv.classList.add('hidden');
+            tabsContainer.classList.remove('hidden');
+            channelContainer.classList.remove('hidden');
+            
+            renderTabs();
+            filterAndRenderChannels();
+            if (allChannels.length > 0) {
+                currentChannelIndex = 0;
+                playStream(allChannels[0].url);
+            }
+        }
+
+        searchBar.addEventListener('input', (e) => filterAndRenderChannels(e.target.value.toLowerCase()));
+        loadAllIPTV();
+    </script>
+</body>
+</html>
